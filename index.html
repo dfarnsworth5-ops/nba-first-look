@@ -284,6 +284,7 @@
     <div class="glossary-section">
       <h3>Badges &amp; Filters</h3>
       <dl>
+        <dt>Starter</dt><dd>A purple "Starter" badge marks players projected to start tonight.</dd>
         <dt>DK Slate / FD Slate</dt><dd>A green "Main" badge means the game is on the DraftKings main slate; a blue "Main" badge means it is on the FanDuel main slate. Use the slate drop-down to show only one site's main-slate games.</dd>
         <dt>DK Pos / FD Pos</dt><dd>Position filters for each site. DraftKings players can be eligible at more than one spot (e.g. PG/SG); G matches PG or SG, F matches SF or PF, and UTIL matches everyone. FanDuel lists a single position per player. Both filters can be combined.</dd>
       </dl>
@@ -409,6 +410,7 @@ let hiddenCols = { schedule: new Set(), teamTotals: new Set(), players: new Set(
 
 const DK_BADGE = { "Main": "#2e7d32" };
 const FD_BADGE = { "Main": "#1565c0" };
+const START_BADGE = { "Starter": "#6a1b9a" };
 
 // panel = name shown in the Columns drop-down (needed because several columns are all headed "+/-")
 const COLUMNS = {
@@ -448,6 +450,7 @@ const COLUMNS = {
   players: [
     { key: "name", label: "Player", link: true },
     { key: "team", label: "Team" },
+    { key: "starter", label: "Starter", badge: START_BADGE },
     { key: "total", label: "Total", pct: "total_pct", auto: true, dec: 1 },
     { key: "dk", label: "DK", fmt: "money" },
     { key: "dkPos", label: "DK Pos" },
