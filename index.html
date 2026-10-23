@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NBA DFS First Look</title>
+<style>
+  :root {
+    --navy: #1a2744;
+    --red: #c8102e;
+    --accent: #7fcf8f;
+    --bg: #fafafa;
+    --border: #e2e2e2;
+    --row-alt: #eef1f7;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+    margin: 0;
+    background: var(--bg);
+    color: #1a1a1a;
+    font-size: 12px;
+    font-variant-numeric: tabular-nums;
+  }
+  /* The page is a fixed-height column: title, tabs and filters stay put at the top,
+     and only the table area scrolls — so the title AND the column headers are always visible. */
+  .shell {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+    min-height: 420px;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    overflow: hidden;
+    background: #fff;
+  }
+  .header {
+    flex: 0 0 auto;
+    background: var(--navy);
+    color: #fff;
+    padding: 14px 20px;
+    border-bottom: 3px solid var(--accent);
+    font-size: 16px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+  }
+  .last-updated { font-size: 11px; font-weight: 400; opacity: 0.75; letter-spacing: normal; }
+  .header-right { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+  .theme-toggle {
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #fff;
+    border-radius: 6px;
+    padding: 5px 9px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .tabs {
+    flex: 0 0 auto;
+    display: flex;
+    overflow-x: auto;
+    background: #eceef2;
+    border-bottom: 1px solid var(--border);
+  }
+  .tab-btn {
+    flex: 0 0 auto;
+    padding: 10px 14px;
+    font-size: 12px;
+    font-weight: 600;
+    background: none;
+    border: none;
+    border-bottom: 3px solid transparent;
+    cursor: pointer;
+    color: #555;
+    white-space: nowrap;
+  }
+  .tab-btn.active { color: var(--navy); border-bottom-color: var(--red); background: #fff; }
+  .toolbar {
+    flex: 0 0 auto;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    align-items: center;
+    padding: 10px 14px;
+    background: #fff;
+    border-bottom: 1px solid var(--border);
+  }
+  #search, #teamFilter, #slateFilter {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    font-size: 12px;
+    background: #fff;
+    color: inherit;
+  }
+  .col-toggle-btn, .col-panel-actions button {
+    padding: 6px 10px;
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    background: #fff;
+    font-size: 12px;
+    cursor: pointer;
+    color: inherit;
+  }
+  .col-panel {
+    display: none;
+    position: absolute;
+    z-index: 30;
+    background: #fff;
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 10px;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+    max-height: 320px;
+    overflow-y: auto;
+    min-width: 200px;
+  }
+  .col-panel.open { display: block; }
+  .col-panel label { display: block; font-size: 12px; padding: 3px 0; cursor: pointer; }
+  .col-panel-actions { display: flex; gap: 6px; margin-bottom: 8px; }
+
+  /* Position filters (Players tab) */
+  .posbar {
+    flex: 0 0 auto;
+    display: none;
+    flex-wrap: wrap;
+    gap: 6px 18px;
+    align-items: center;
+    padding: 8px 14px;
+    background: #f6f7fa;
+    border-bottom: 1px solid var(--border);
+  }
+  .posgroup { display: flex; align-items: center; gap: 5px; }
+  .posgroup .pg-label {
+    font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
+    color: #fff; padding: 3px 8px; border-radius: 4px; margin-right: 2px;
+  }
+  .posgroup.dk .pg-label { background: #2e7d32; }
+  .posgroup.fd .pg-label { background: #1565c0; }
+  .chip {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 999px;
+    background: #fff;
+    font-size: 11px;
+    font-weight: 700;
+    color: #555;
+    cursor: pointer;
+  }
+  .posgroup.dk .chip.on { background: #2e7d32; border-color: #2e7d32; color: #fff; }
+  .posgroup.fd .chip.on { background: #1565c0; border-color: #1565c0; color: #fff; }
+
+  .table-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; position: relative; }
+  .table-footer { flex: 0 0 auto; font-size: 12px; font-style: italic; color: #6b7280; padding: 6px 10px; border-top: 1px solid var(--border); background: #fff; }
+  table { border-collapse: collapse; width: 100%; font-size: 12px; }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--navy);
+    z-index: 2;
+    padding: 8px 6px;
+    text-align: center;
+    border-bottom: 3px solid var(--accent);
+    cursor: pointer;
+    user-select: none;
+    font-weight: 700;
+    color: #fff;
+    text-transform: uppercase;
+    font-size: 11px;
+    letter-spacing: 0.4px;
+    white-space: nowrap;
+    min-width: 66px;
+  }
+  thead th:first-child { text-align: left; position: sticky; left: 0; z-index: 3; max-width: 160px; min-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+  .arrow { font-size: 10px; color: var(--accent); margin-left: 3px; }
+  tbody td {
+    padding: 9px 10px;
+    border-bottom: 1px solid var(--border);
+    text-align: center;
+    white-space: nowrap;
+    min-width: 66px;
+  }
+  tbody td:first-child { text-align: left; font-weight: 600; position: sticky; left: 0; background: inherit; z-index: 1; max-width: 160px; min-width: 110px; overflow: hidden; text-overflow: ellipsis; }
+  tbody tr { background: #fff; }
+  tbody tr:nth-child(even) { background: var(--row-alt); }
+  tbody tr:nth-child(even) td:first-child { background: var(--row-alt); }
+  tbody tr:hover td { filter: brightness(0.96); transition: filter 0.12s ease; }
+  /* Roomier rows on the Schedule and Team Totals tabs (fewer rows than Players) */
+  table.tab-schedule, table.tab-teamTotals { font-size: 13px; }
+  table.tab-schedule tbody td, table.tab-teamTotals tbody td { padding: 12px 11px; }
+  table.tab-schedule thead th, table.tab-teamTotals thead th { font-size: 12px; padding: 11px 8px; }
+  table.tab-schedule tbody td:first-child, table.tab-teamTotals tbody td:first-child { max-width: 190px; }
+  /* Players tab: wide enough for long names plus the PS badge */
+  table.tab-players tbody td:first-child { min-width: 210px; max-width: 260px; }
+  .empty-row td { padding: 24px; color: #888; font-style: italic; }
+  .glossary-wrap { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 20px; }
+  .glossary-section { margin-bottom: 20px; }
+  .glossary-section h3 { color: var(--navy); border-bottom: 2px solid var(--accent); padding-bottom: 6px; }
+  .glossary-section dl { margin: 0; display: grid; grid-template-columns: 180px 1fr; row-gap: 8px; column-gap: 16px; }
+  .glossary-section dt { font-weight: 700; font-size: 13px; color: #1a1a1a; text-transform: uppercase; letter-spacing: 0.3px; }
+  .glossary-section dd { margin: 0; font-size: 13px; color: #444; line-height: 1.4; }
+  @media (max-width: 560px) { .glossary-section dl { grid-template-columns: 1fr; } }
+
+  /* ---------- Dark mode ---------- */
+  body.dark { background: #10141f; color: #e4e6ec; }
+  body.dark .shell, body.dark .toolbar, body.dark .glossary-wrap, body.dark .table-footer,
+  body.dark .tab-btn, body.dark #search, body.dark #teamFilter, body.dark #slateFilter,
+  body.dark .col-toggle-btn, body.dark .col-panel {
+    background: #1a2030;
+    border-color: #2c3448;
+    color: #e4e6ec;
+  }
+  body.dark .tabs { background: #141a28; border-bottom-color: #2c3448; }
+  body.dark .posbar { background: #151b2a; border-bottom-color: #2c3448; }
+  body.dark .chip { background: #1a2030; border-color: #2c3448; color: #b6bcca; }
+  body.dark .tab-btn.active { background: var(--navy); color: #fff; }
+  body.dark tbody tr { background: #1a2030; }
+  body.dark tbody tr:nth-child(even), body.dark tbody tr:nth-child(even) td:first-child { background: #212a3d; }
+  body.dark tbody td { border-bottom-color: #2c3448; color: #e4e6ec; }
+  body.dark tbody tr:hover td { filter: brightness(1.15); }
+  body.dark .col-panel label { color: #e4e6ec; }
+  body.dark .col-panel-actions button { background: #2c3448; border-color: #3a4460; color: #e4e6ec; }
+  body.dark .glossary-section dt { color: #e4e6ec; }
+  body.dark .glossary-section dd { color: #b6bcca; }
+  body.dark .glossary-section h3 { color: #e4e6ec; }
+</style>
+</head>
+<body class="dark">
+<div class="shell">
+  <div class="header">
+    <span>🏀 NBA DFS FIRST LOOK</span>
+    <span id="lastUpdated" class="last-updated"></span>
+    <div class="header-right">
+      <button id="themeToggle" class="theme-toggle" title="Toggle dark mode">🌙</button>
+    </div>
+  </div>
+  <div class="tabs" id="tabs">
+    <button class="tab-btn active" data-tab="schedule">Schedule</button>
+    <button class="tab-btn" data-tab="teamTotals">Team Totals &amp; Pace</button>
+    <button class="tab-btn" data-tab="players">Players</button>
+    <button class="tab-btn" data-tab="glossary">Glossary</button>
+  </div>
+  <div class="toolbar" id="toolbar">
+    <input type="text" id="search" placeholder="Search name or team...">
+    <select id="teamFilter"><option value="">All Teams</option></select>
+    <select id="slateFilter">
+      <option value="">All Games</option>
+      <option value="dk">DK Main</option>
+      <option value="fd">FD Main</option>
+    </select>
+    <div style="position:relative;">
+      <button class="col-toggle-btn" id="colToggleBtn">Columns ▾</button>
+      <div class="col-panel" id="colPanel">
+        <div class="col-panel-actions">
+          <button id="showAllBtn">Show All</button>
+          <button id="hideMostBtn">Hide Most</button>
+        </div>
+        <div id="colList"></div>
+      </div>
+    </div>
+  </div>
+  <div class="posbar" id="posBar">
+    <div class="posgroup dk" id="dkPosGroup"><span class="pg-label">DK Pos</span></div>
+    <div class="posgroup fd" id="fdPosGroup"><span class="pg-label">FD Pos</span></div>
+  </div>
+  <div class="table-wrap" id="tableWrap">
+    <table id="dataTable">
+      <thead><tr id="headRow"></tr></thead>
+      <tbody id="bodyRows"></tbody>
+    </table>
+  </div>
+  <div class="glossary-wrap" id="glossaryWrap" style="display:none;">
+    <div class="glossary-section">
+      <h3>About the Numbers</h3>
+      <dl>
+        <dt>Season stats</dt><dd>The season-long stats in these tables (points, minutes, usage, pace, ratings and so on) are from this season.</dd>
+        <dt>+/- columns</dt><dd>Compare each player's or team's last 5 games with their season numbers, so you can spot who is trending up or down.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>Badges &amp; Filters</h3>
+      <dl>
+        <dt>PS</dt><dd>A bright green "PS" badge next to a player's name means projected starter.</dd>
+        <dt>DK Slate / FD Slate</dt><dd>Badge colors: orange M = Main, green L = Late, blue S = Showdown (same colors for both sites). Use the slate drop-down to show only one site's main-slate games.</dd>
+        <dt>DK Pos / FD Pos</dt><dd>Position filters for each site. DraftKings players can be eligible at more than one spot (e.g. PG/SG); G matches PG or SG, F matches SF or PF, and UTIL matches everyone. FanDuel lists a single position per player. Both filters can be combined.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>Schedule</h3>
+      <dl>
+        <dt>Favorite / Spread</dt><dd>The favored team and the size of the spread.</dd>
+        <dt>Game Total</dt><dd>The over/under for the game.</dd>
+        <dt>Road Total / Home Total</dt><dd>Implied point total for the road / home team, derived from the spread and game total.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>Team Totals &amp; Pace</h3>
+      <dl>
+        <dt>Line / Total</dt><dd>The team's spread and implied team total.</dd>
+        <dt>PPG</dt><dd>Points scored per game.</dd>
+        <dt>+/-</dt><dd>The change in the stat to its left: the last 5 games minus the season number. A positive number means the team or player is trending up recently.</dd>
+        <dt>O-Rat</dt><dd>Offensive rating rank (1–30) — points scored per 100 possessions.</dd>
+        <dt>Pace</dt><dd>Pace rank (1–30) — possessions per 48 minutes.</dd>
+        <dt>Reb %</dt><dd>Rank (1–30) for rebound rate — share of available rebounds the team collects.</dd>
+        <dt>Opp Pace, Opp Reb %</dt><dd>The same ranks for this team's opponent.</dd>
+        <dt>Opp 3PAtt / Opp 3P %</dt><dd>Ranks (1–30) for the three-point attempts and three-point percentage the opposing defense allows.</dd>
+        <dt>Opp PAPG</dt><dd>Rank (1–30) for points allowed per game by the opposing defense.</dd>
+        <dt>Opp D-Rat</dt><dd>Rank (1–30) for the opponent's defensive rating — points allowed per 100 possessions.</dd>
+        <dt>Colors</dt><dd>Blue is good for the offense, red is bad. For the team's own stats and for Opp Pace, rank 1 is blue. For the opponent's defensive stats (Opp Reb %, 3PAtt, 3P %, PAPG, D-Rat), rank 1 is red, the toughest matchup.</dd>
+        <dt>P-Pace</dt><dd>Projected pace for tonight's game, combining both teams' pace and the spread.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>Players</h3>
+      <dl>
+        <dt>Total</dt><dd>The player's team's implied total.</dd>
+        <dt>DK / FD</dt><dd>Salary on DraftKings / FanDuel.</dd>
+        <dt>MIN/G</dt><dd>Minutes per game.</dd>
+        <dt>FP/G</dt><dd>Fantasy points per game.</dd>
+        <dt>USG%</dt><dd>Usage rate — the share of team possessions the player ends while on the floor.</dd>
+        <dt>PPG / APG / RPG</dt><dd>Points, assists and rebounds per game.</dd>
+        <dt>DK/M, FD/M</dt><dd>Fantasy points per minute on DraftKings / FanDuel — production independent of playing time.</dd>
+        <dt>+/-</dt><dd>The change in the stat to its left: the last 5 games minus the season number. A positive number means the team or player is trending up recently.</dd>
+      </dl>
+    </div>
+    <div class="glossary-section">
+      <h3>Color Coding</h3>
+      <p style="margin:0 0 12px; font-size:13px; color:#555;">Every colored stat is ranked against the rest of the table and shaded on a continuous scale — deep blue for the best matchups/performances, deep orange/red for the worst, with lighter shades in between. The scale is calculated automatically from that day's data.</p>
+      <div style="height:32px; border-radius:6px; background:linear-gradient(to right, #B2182B 0%, #EF8A62 16.667%, #FDDBC7 33.333%, #F7F7F7 50%, #D1E5F0 66.667%, #67A9CF 83.333%, #2166AC 100%); border:0.5px solid #ccc; max-width:420px;"></div>
+      <div style="display:flex; justify-content:space-between; margin-top:4px; font-size:11px; color:#777; max-width:420px;">
+        <span>Worst</span><span>Average</span><span>Elite</span>
+      </div>
+      <p style="margin:12px 0 0; font-size:12px; color:#777;">For a few stats (like an opponent's rebounding rate), a lower raw number is the better outcome — those are colored so blue always means "good" and red always means "bad."</p>
+    </div>
+  </div>
+  <div class="table-footer" id="tableFooter">Salaries: DraftKings &amp; FanDuel. Stats: this season; +/- = last 5 games vs. season. PS = projected starter.</div>
+</div>
+
+<script>
+const STOPS = [
+  [0, [178,24,43]], [1/6, [239,138,98]], [2/6, [253,219,199]],
+  [3/6, [247,247,247]], [4/6, [209,229,240]], [5/6, [103,169,207]], [1, [33,102,172]]
+];
+function lerp(a,b,t){ return a+(b-a)*t; }
+function gradientColor(p) {
+  p = Math.max(0, Math.min(1, p));
+  let lo = STOPS[0], hi = STOPS[STOPS.length-1];
+  for (let i=0;i<STOPS.length-1;i++){
+    if (p>=STOPS[i][0] && p<=STOPS[i+1][0]) { lo=STOPS[i]; hi=STOPS[i+1]; break; }
+  }
+  const t = (p-lo[0])/((hi[0]-lo[0]) || 1);
+  const r = Math.round(lerp(lo[1][0],hi[1][0],t));
+  const g = Math.round(lerp(lo[1][1],hi[1][1],t));
+  const b = Math.round(lerp(lo[1][2],hi[1][2],t));
+  const lum = 0.299*r+0.587*g+0.114*b;
+  return { bg: `rgb(${r},${g},${b})`, text: lum > 150 ? "black" : "white" };
+}
+
+// Ranks ascending by raw value; ties always get the same percentile.
+function computeAutoPercentiles(rows, cols) {
+  cols.filter(c => c.auto).forEach(col => {
+    const withIdx = rows.map((r, i) => [i, r[col.key]]).filter(([, v]) => v !== null && v !== undefined && v !== "");
+    const n = withIdx.length;
+    if (n === 0) return;
+    withIdx.sort((a, b) => a[1] - b[1]);
+    let i = 0;
+    while (i < n) {
+      let j = i;
+      while (j + 1 < n && withIdx[j + 1][1] === withIdx[i][1]) j++;
+      const avgPosition = (i + j) / 2;
+      const p = n > 1 ? (col.invert ? (n - 1 - avgPosition) / (n - 1) : avgPosition / (n - 1)) : 0.5;
+      for (let k = i; k <= j; k++) rows[withIdx[k][0]][col.pct] = p;
+      i = j + 1;
+    }
+  });
+}
+
+// Ranks road and home totals against ONE shared pool so a 112.0 colors the same either way.
+function computeSharedPoolPercentiles(rows, fieldA, pctA, fieldB, pctB) {
+  const pool = [];
+  rows.forEach((r, i) => {
+    if (r[fieldA] !== null && r[fieldA] !== undefined) pool.push([i, fieldA, r[fieldA]]);
+    if (r[fieldB] !== null && r[fieldB] !== undefined) pool.push([i, fieldB, r[fieldB]]);
+  });
+  const n = pool.length;
+  if (n === 0) return;
+  pool.sort((a, b) => a[2] - b[2]);
+  let i = 0;
+  while (i < n) {
+    let j = i;
+    while (j + 1 < n && pool[j + 1][2] === pool[i][2]) j++;
+    const p = n > 1 ? ((i + j) / 2) / (n - 1) : 0.5;
+    for (let k = i; k <= j; k++) {
+      const [rowIdx, field] = pool[k];
+      rows[rowIdx][field === fieldA ? pctA : pctB] = p;
+    }
+    i = j + 1;
+  }
+}
+
+let DATA = { schedule: [], teamTotals: [], players: [] };
+let activeTab = "schedule";
+let sortKey = null, sortDir = 1;
+let teamFilter = "", slateFilter = "", searchTerm = "";
+let dkPosFilter = "", fdPosFilter = "";
+let hiddenCols = { schedule: new Set(), teamTotals: new Set(), players: new Set() };
+
+const slateInfo = v => {
+  const raw = String(v ?? "").trim(), s = raw.toLowerCase();
+  if (/^(y|yes|x|true|1|✓|m|main)$/.test(s)) return ["M", "Main"];
+  if (/^l(ate)?$|^late/.test(s)) return ["L", "Late"];
+  if (/^(s|sd)$|^show/.test(s)) return ["S", "Showdown"];
+  return [raw.charAt(0).toUpperCase(), raw];
+};
+const DK_BADGE = { M: "#f57c00", L: "#2e7d32", S: "#1565c0" };   // Main orange, Late green, Showdown blue
+const FD_BADGE = DK_BADGE;
+
+// panel = name shown in the Columns drop-down (needed because several columns are all headed "+/-")
+const COLUMNS = {
+  schedule: [
+    { key: "awayTeam", label: "Road Team" },
+    { key: "homeTeam", label: "Home Team", bold: true },
+    { key: "favorite", label: "Favorite" },
+    { key: "spread", label: "Spread", dec: 1 },
+    { key: "total", label: "Game Total", pct: "total_pct", auto: true, dec: 1 },
+    { key: "awayTotal", label: "Road Total", pct: "awayTotal_pct", dec: 1 },
+    { key: "homeTotal", label: "Home Total", pct: "homeTotal_pct", dec: 1 },
+    { key: "time", label: "Time (ET)" },
+    { key: "dkSlate", label: "DK Slate", badge: DK_BADGE },
+    { key: "fdSlate", label: "FD Slate", badge: FD_BADGE }
+  ],
+  teamTotals: [
+    { key: "offense", label: "Offense" },
+    { key: "line", label: "Line", dec: 1 },
+    { key: "total", label: "Total", pct: "total_pct", auto: true, dec: 1 },
+    { key: "ppg", label: "PPG", pct: "ppg_pct", auto: true, dec: 1 },
+    { key: "ppgDiff", label: "+/-", panel: "PPG +/-", pct: "ppgDiff_pct", auto: true, dec: 1, signed: true },
+    { key: "oRat", label: "O-Rat", pct: "oRat_pct", auto: true, invert: true, dec: 0 },
+    { key: "pace", label: "Pace", pct: "pace_pct", auto: true, invert: true, dec: 0 },
+    { key: "reb", label: "Reb %", pct: "reb_pct", auto: true, invert: true, dec: 0 },
+    { key: "matchup", label: "Matchup" },
+    { key: "oPace", label: "Opp Pace", pct: "oPace_pct", auto: true, invert: true, dec: 0 },
+    { key: "oReb", label: "Opp Reb %", pct: "oReb_pct", auto: true, dec: 0 },
+    { key: "o3pa", label: "Opp 3PAtt", pct: "o3pa_pct", auto: true, dec: 0 },
+    { key: "o3p", label: "Opp 3P %", pct: "o3p_pct", auto: true, dec: 0 },
+    { key: "opapg", label: "Opp PAPG", pct: "opapg_pct", auto: true, dec: 0 },
+    { key: "oDRat", label: "Opp D-Rat", pct: "oDRat_pct", auto: true, dec: 0 },
+    { key: "pPace", label: "P-Pace", pct: "pPace_pct", auto: true, dec: 1 },
+    { key: "time", label: "Time (ET)" },
+    { key: "dkSlate", label: "DK Slate", badge: DK_BADGE },
+    { key: "fdSlate", label: "FD Slate", badge: FD_BADGE }
+  ],
+  players: [
+    { key: "name", label: "Player", link: true },
+    { key: "team", label: "Team" },
+    { key: "total", label: "Total", pct: "total_pct", auto: true, dec: 1 },
+    { key: "dk", label: "DK", fmt: "money" },
+    { key: "dkPos", label: "DK Pos" },
+    { key: "fd", label: "FD", fmt: "money" },
+    { key: "fdPos", label: "FD Pos" },
+    { key: "min", label: "MIN/G", pct: "min_pct", auto: true, dec: 1 },
+    { key: "minDiff", label: "+/-", panel: "MIN/G +/-", pct: "minDiff_pct", auto: true, dec: 1, signed: true },
+    { key: "fpg", label: "FP/G", pct: "fpg_pct", auto: true, dec: 1 },
+    { key: "fpgDiff", label: "+/-", panel: "FP/G +/-", pct: "fpgDiff_pct", auto: true, dec: 1, signed: true },
+    { key: "usg", label: "USG%", fmt: "pct", pct: "usg_pct", auto: true, dec: 1 },
+    { key: "usgDiff", label: "+/-", panel: "USG% +/-", pct: "usgDiff_pct", auto: true, dec: 1, signed: true },
+    { key: "ppg", label: "PPG", pct: "ppg_pct", auto: true, dec: 1 },
+    { key: "ppgDiff", label: "+/-", panel: "PPG +/-", pct: "ppgDiff_pct", auto: true, dec: 1, signed: true },
+    { key: "apg", label: "APG", pct: "apg_pct", auto: true, dec: 1 },
+    { key: "apgDiff", label: "+/-", panel: "APG +/-", pct: "apgDiff_pct", auto: true, dec: 1, signed: true },
+    { key: "rpg", label: "RPG", pct: "rpg_pct", auto: true, dec: 1 },
+    { key: "rpgDiff", label: "+/-", panel: "RPG +/-", pct: "rpgDiff_pct", auto: true, dec: 1, signed: true },
+    { key: "dkm", label: "DK/M", pct: "dkm_pct", auto: true, dec: 2 },
+    { key: "dkmDiff", label: "+/-", panel: "DK/M +/-", pct: "dkmDiff_pct", auto: true, dec: 2, signed: true },
+    { key: "fdm", label: "FD/M", pct: "fdm_pct", auto: true, dec: 2 },
+    { key: "fdmDiff", label: "+/-", panel: "FD/M +/-", pct: "fdmDiff_pct", auto: true, dec: 2, signed: true },
+    { key: "matchup", label: "Matchup" },
+    { key: "time", label: "Time (ET)" },
+    { key: "dkSlate", label: "DK Slate", badge: DK_BADGE },
+    { key: "fdSlate", label: "FD Slate", badge: FD_BADGE }
+  ]
+};
+
+function normName(s) { return (s || "").toLowerCase().replace(/[^a-z0-9]/g, ""); }
+
+function fmt(val, type, dec, signed) {
+  if (val === null || val === undefined || val === "") return "—";
+  if (type === "money") return "$" + Number(val).toLocaleString();
+  let v = val;
+  if (dec !== undefined && dec !== null && !isNaN(Number(val))) v = Number(val).toFixed(dec);
+  if (signed && !isNaN(Number(val)) && Number(val) > 0) v = "+" + v;
+  if (type === "pct") return v + "%";
+  return v;
+}
+
+// Position matching. DraftKings can list several spots ("PG/SG"); G = PG or SG, F = SF or PF, UTIL = everyone.
+function posMatch(posStr, f) {
+  if (!f) return true;
+  if (f === "UTIL") return true;
+  const toks = String(posStr || "").toUpperCase().split(/[\/,\s]+/).filter(Boolean);
+  if (f === "G") return toks.some(t => t === "PG" || t === "SG" || t === "G");
+  if (f === "F") return toks.some(t => t === "SF" || t === "PF" || t === "F");
+  return toks.includes(f);
+}
+
+function render() {
+  document.getElementById("dataTable").className = "tab-" + activeTab;
+  const cols = COLUMNS[activeTab].filter(c => !hiddenCols[activeTab].has(c.key));
+  const headRow = document.getElementById("headRow");
+  headRow.innerHTML = "";
+  cols.forEach(col => {
+    const th = document.createElement("th");
+    th.textContent = col.label;
+    th.title = col.panel || col.label;
+    if (sortKey === col.key) {
+      const arrow = document.createElement("span");
+      arrow.className = "arrow";
+      arrow.textContent = sortDir === 1 ? "▲" : "▼";
+      th.appendChild(arrow);
+    }
+    th.addEventListener("click", () => {
+      if (sortKey === col.key) sortDir *= -1; else { sortKey = col.key; sortDir = 1; }
+      render();
+    });
+    headRow.appendChild(th);
+  });
+
+  let rows = DATA[activeTab].slice();
+  if (teamFilter) rows = rows.filter(r => [r.team, r.offense, r.homeTeam, r.awayTeam].includes(teamFilter));
+  if (slateFilter === "dk") rows = rows.filter(r => slateInfo(r.dkSlate)[0] === "M");
+  if (slateFilter === "fd") rows = rows.filter(r => slateInfo(r.fdSlate)[0] === "M");
+  if (activeTab === "players") {
+    if (dkPosFilter) rows = rows.filter(r => posMatch(r.dkPos, dkPosFilter));
+    if (fdPosFilter) rows = rows.filter(r => posMatch(r.fdPos, fdPosFilter));
+  }
+  if (searchTerm) {
+    const t = searchTerm.toLowerCase();
+    rows = rows.filter(r => JSON.stringify(r).toLowerCase().includes(t));
+  }
+  if (sortKey) {
+    rows.sort((a, b) => {
+      let av = a[sortKey], bv = b[sortKey];
+      if (av === null || av === undefined || av === "") av = -Infinity;
+      if (bv === null || bv === undefined || bv === "") bv = -Infinity;
+      if (typeof av === "string" || typeof bv === "string") return String(av).localeCompare(String(bv)) * sortDir;
+      return (av - bv) * sortDir;
+    });
+  }
+
+  const tbody = document.getElementById("bodyRows");
+  tbody.innerHTML = "";
+  if (!rows.length) {
+    tbody.innerHTML = '<tr class="empty-row"><td colspan="' + cols.length + '" style="text-align:center;">No rows match these filters.</td></tr>';
+    return;
+  }
+  rows.forEach(row => {
+    const tr = document.createElement("tr");
+    cols.forEach((col, ci) => {
+      const td = document.createElement("td");
+      td.setAttribute("data-label", col.label);
+      const v = row[col.key];
+      if (col.badge) {
+        if (v) {
+          const pill = document.createElement("span");
+          const info = slateInfo(v);
+          pill.textContent = info[0];
+          pill.title = info[1];
+          pill.style.cssText = "display:inline-block;min-width:24px;text-align:center;padding:2px 9px;border-radius:10px;font-size:11px;font-weight:700;color:#fff;background:" + (col.badge[info[0]] || "#888");
+          td.appendChild(pill);
+        } else td.textContent = "";
+      } else if (col.link && PLAYER_URLS[normName(v)]) {
+        const a = document.createElement("a");
+        a.href = PLAYER_URLS[normName(v)]; a.target = "_blank"; a.rel = "noopener";
+        a.textContent = fmt(v, col.fmt, col.dec);
+        a.style.color = "inherit"; a.style.textDecoration = "none";
+        a.addEventListener("mouseenter", () => a.style.textDecoration = "underline");
+        a.addEventListener("mouseleave", () => a.style.textDecoration = "none");
+        td.appendChild(a);
+      } else {
+        td.textContent = fmt(v, col.fmt, col.dec, col.signed);
+      }
+      if (col.link && row.starter) {
+        const ps = document.createElement("span");
+        ps.textContent = "PS"; ps.title = "Projected starter";
+        ps.style.cssText = "display:inline-block;margin-left:6px;padding:1px 6px;border-radius:8px;font-size:10px;font-weight:700;color:#04210f;background:#22e05a;vertical-align:middle;";
+        td.appendChild(ps);
+      }
+      if (col.bold) td.style.fontWeight = "700";
+      if (ci === 0) td.title = fmt(v, col.fmt, col.dec);
+      if (!col.badge && col.pct && row[col.pct] !== null && row[col.pct] !== undefined && v !== null && v !== undefined && v !== "") {
+        const c = gradientColor(row[col.pct]);
+        td.style.background = c.bg;
+        td.style.color = c.text;
+      }
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+}
+
+function populateTeamFilter() {
+  const sel = document.getElementById("teamFilter");
+  sel.innerHTML = '<option value="">All Teams</option>';
+  const teams = new Set();
+  DATA[activeTab].forEach(r => [r.team, r.offense, r.homeTeam, r.awayTeam].forEach(t => { if (t) teams.add(t); }));
+  [...teams].sort().forEach(t => {
+    const opt = document.createElement("option");
+    opt.value = t; opt.textContent = t;
+    sel.appendChild(opt);
+  });
+}
+
+function populateColumnPanel() {
+  const list = document.getElementById("colList");
+  list.innerHTML = "";
+  COLUMNS[activeTab].forEach(col => {
+    const label = document.createElement("label");
+    const cb = document.createElement("input");
+    cb.type = "checkbox";
+    cb.checked = !hiddenCols[activeTab].has(col.key);
+    cb.addEventListener("change", () => {
+      if (cb.checked) hiddenCols[activeTab].delete(col.key); else hiddenCols[activeTab].add(col.key);
+      render();
+    });
+    label.appendChild(cb);
+    label.appendChild(document.createTextNode(" " + (col.panel || col.label)));
+    list.appendChild(label);
+  });
+}
+
+// Position chips (built once)
+function buildChips(groupId, positions, getter, setter) {
+  const g = document.getElementById(groupId);
+  positions.forEach(p => {
+    const b = document.createElement("button");
+    b.className = "chip" + (p === "All" ? " on" : "");
+    b.textContent = p;
+    b.addEventListener("click", () => {
+      setter(p === "All" ? "" : p);
+      g.querySelectorAll(".chip").forEach(c => c.classList.toggle("on", c === b));
+      render();
+    });
+    g.appendChild(b);
+  });
+}
+buildChips("dkPosGroup", ["All", "PG", "SG", "SF", "PF", "C", "G", "F", "UTIL"], () => dkPosFilter, v => dkPosFilter = v);
+buildChips("fdPosGroup", ["All", "PG", "SG", "SF", "PF", "C"], () => fdPosFilter, v => fdPosFilter = v);
+
+function setView(tab) {
+  const isTable = tab !== "glossary";
+  document.getElementById("toolbar").style.display = isTable ? "flex" : "none";
+  document.getElementById("posBar").style.display = tab === "players" ? "flex" : "none";
+  document.getElementById("tableWrap").style.display = isTable ? "block" : "none";
+  document.getElementById("tableFooter").style.display = isTable ? "block" : "none";
+  document.getElementById("glossaryWrap").style.display = isTable ? "none" : "block";
+}
+
+document.querySelectorAll(".tab-btn").forEach(btn => {
+  btn.addEventListener("click", () => {
+    document.querySelectorAll(".tab-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+    activeTab = btn.dataset.tab;
+    sortKey = null; sortDir = 1; teamFilter = ""; slateFilter = ""; searchTerm = "";
+    document.getElementById("search").value = "";
+    document.getElementById("slateFilter").value = "";
+    setView(activeTab);
+    if (activeTab !== "glossary") {
+      populateTeamFilter();
+      populateColumnPanel();
+      render();
+      document.getElementById("tableWrap").scrollTop = 0;
+    }
+  });
+});
+
+document.getElementById("search").addEventListener("input", e => { searchTerm = e.target.value; render(); });
+document.getElementById("teamFilter").addEventListener("change", e => { teamFilter = e.target.value; render(); });
+document.getElementById("slateFilter").addEventListener("change", e => { slateFilter = e.target.value; render(); });
+document.getElementById("colToggleBtn").addEventListener("click", () => {
+  document.getElementById("colPanel").classList.toggle("open");
+});
+document.getElementById("showAllBtn").addEventListener("click", () => {
+  hiddenCols[activeTab].clear(); populateColumnPanel(); render();
+});
+document.getElementById("hideMostBtn").addEventListener("click", () => {
+  COLUMNS[activeTab].forEach((c, i) => { if (i > 2) hiddenCols[activeTab].add(c.key); });
+  populateColumnPanel(); render();
+});
+document.addEventListener("click", e => {
+  const panel = document.getElementById("colPanel");
+  const btn = document.getElementById("colToggleBtn");
+  if (!panel.contains(e.target) && e.target !== btn) panel.classList.remove("open");
+});
+
+// ---------- Dark mode ----------
+function applyTheme(dark) {
+  document.body.classList.toggle("dark", dark);
+  document.getElementById("themeToggle").textContent = dark ? "☀️" : "🌙";
+}
+let savedTheme = null;
+try { savedTheme = localStorage.getItem("nbafirstlook-theme"); } catch (e) {}
+// Dark is the default; the toggle switches to light. ?theme=light|dark overrides the saved choice.
+const themeParam = new URLSearchParams(location.search).get("theme");
+applyTheme((themeParam || savedTheme) !== "light");
+document.getElementById("themeToggle").addEventListener("click", () => {
+  const isDark = !document.body.classList.contains("dark");
+  applyTheme(isDark);
+  try { localStorage.setItem("nbafirstlook-theme", isDark ? "dark" : "light"); } catch (e) {}
+});
+
+function showLastUpdated(iso) {
+  const el = document.getElementById("lastUpdated");
+  const d = iso ? new Date(iso) : null;
+  if (!d || isNaN(d.getTime())) { el.textContent = ""; return; }
+  el.textContent = "Data as of " + d.toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+}
+
+let PLAYER_URLS = {};
+
+// Each slate gets its own permanent file named by date (2026-10-20.json, ...), picked with ?date=2026-10-20 in the
+// embed URL, so an article keeps showing its own day's data. With no ?date=, the page reads latest.json (a tiny
+// pointer naming the current slate), falling back to data.json.
+const urlParams = new URLSearchParams(location.search);
+const reqParam = urlParams.get("date") || urlParams.get("slate") || "";
+const requestedSlate = /^[A-Za-z0-9_-]{1,40}$/.test(reqParam) ? reqParam : "";
+function loadFirstLook() {
+  const get = f => fetch(f + ".json?v=" + Date.now()).then(r => {
+    if (!r.ok) throw new Error(f + ".json not found (HTTP " + r.status + ")");
+    return r.json();
+  });
+  if (requestedSlate) return get(requestedSlate);
+  return fetch("latest.json?v=" + Date.now())
+    .then(r => r.ok ? r.json() : null).catch(() => null)
+    .then(l => get(l && l.current ? l.current : "data"));
+}
+
+Promise.all([
+  loadFirstLook(),
+  fetch("players.json").then(r => r.json()).catch(() => ({}))
+])
+  .then(([json, urls]) => {
+    DATA = Object.assign({ schedule: [], teamTotals: [], players: [] }, json);
+    ["schedule", "teamTotals", "players"].forEach(k => { DATA[k] = (Array.isArray(DATA[k]) ? DATA[k] : []).filter(r => r && typeof r === "object"); });   // drop blank/null rows so one bad row can't break the page
+    PLAYER_URLS = urls;
+    showLastUpdated(DATA.lastUpdated);
+    Object.keys(COLUMNS).forEach(tab => computeAutoPercentiles(DATA[tab] || [], COLUMNS[tab]));
+    computeSharedPoolPercentiles(DATA.schedule || [], "awayTotal", "awayTotal_pct", "homeTotal", "homeTotal_pct");
+    populateTeamFilter();
+    populateColumnPanel();
+    render();
+    const wantTab = urlParams.get("tab");
+    if (/^[A-Za-z0-9]{1,20}$/.test(wantTab || "")) {
+      const tb = document.querySelector('.tab-btn[data-tab="' + wantTab + '"]');
+      if (tb) tb.click();
+    }
+  })
+  .catch(err => {
+    document.getElementById("bodyRows").innerHTML =
+      '<tr><td colspan="20" style="padding:20px;text-align:center;color:#999;">Could not load the table data — if opening this file directly (file://), it needs to be served over http(s), e.g. via GitHub Pages.</td></tr>';
+    console.error(err);
+  });
+</script>
+</body>
+</html>
